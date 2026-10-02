@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="Séquence enregistrée">
+        <SeekBarPreference
+            android:max="60"
+            app:defaultValue="30"
+            app:key="pre_seconds"
+            app:min="5"
+            app:showSeekBarValue="true"
+            app:title="Avant le tir (s)" />
+        <SeekBarPreference
+            android:max="60"
+            app:defaultValue="20"
+            app:key="post_seconds"
+            app:min="5"
+            app:showSeekBarValue="true"
+            app:title="Après le tir (s)" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Vidéo (appliqué au prochain démarrage)">
+        <ListPreference
+            app:defaultValue="1080"
+            app:entries="@array/res_labels"
+            app:entryValues="@array/res_values"
+            app:key="resolution"
+            app:title="Résolution"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:defaultValue="30"
+            app:entries="@array/fps_labels"
+            app:entryValues="@array/fps_values"
+            app:key="fps"
+            app:title="Images par seconde"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="record_audio"
+            app:title="Enregistrer le son" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Armement">
+        <ListPreference
+            app:defaultValue="MOTION"
+            app:entries="@array/arm_labels"
+            app:entryValues="@array/arm_values"
+            app:key="arm_mode"
+            app:title="Mode"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:max="600"
+            app:defaultValue="120"
+            app:key="arm_timeout"
+            app:min="30"
+            app:seekBarIncrement="10"
+            app:showSeekBarValue="true"
+            app:summary="Mode mise en joue : la caméra s’arrête si ni visée ni tir pendant ce délai"
+            app:title="Désarmement après inactivité (s)" />
+        <SeekBarPreference
+            android:max="80"
+            app:defaultValue="25"
+            app:key="aim_rate"
+            app:min="10"
+            app:showSeekBarValue="true"
+            app:summary="Vitesse de rotation qui arme la caméra. Plus bas = plus sensible."
+            app:title="Seuil mise en joue (x0,1 rad/s)" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Détection du tir">
+        <ListPreference
+            app:defaultValue="ACCEL"
+            app:entries="@array/shot_labels"
+            app:entryValues="@array/shot_values"
+            app:key="shot_mode"
+            app:title="Déclencheur"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:max="150"
+            app:defaultValue="35"
+            app:key="recoil_threshold"
+            app:min="10"
+            app:showSeekBarValue="true"
+            app:summary="Noter la valeur « Accél » affichée lors d’un tir et régler ~70 % de ce pic"
+            app:title="Seuil de recul (m/s²)" />
+        <SeekBarPreference
+            android:max="100"
+            app:defaultValue="85"
+            app:key="audio_threshold"
+            app:min="30"
+            app:showSeekBarValue="true"
+            app:title="Seuil sonore (%)" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Divers">
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="vibrate"
+            app:title="Vibration (tir détecté / clip sauvé)" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="keep_screen_on"
+            app:title="Garder l’écran allumé" />
+    </PreferenceCategory>
+</PreferenceScreen>
