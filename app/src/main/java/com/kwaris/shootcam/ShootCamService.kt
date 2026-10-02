@@ -28,7 +28,7 @@ import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.max
 
-/** État partagé avec l'écran (lu par polling). */
+/** State shared with the UI (read by polling). */
 object StatusBus {
     @Volatile var running = false
     @Volatile var state = "Arrêté"
@@ -53,7 +53,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
         @Volatile var instance: ShootCamService? = null
             private set
 
-        /** Surface d'aperçu fournie par l'écran principal (null si écran fermé). */
+        /** Preview surface provided by the main screen (null when the screen is closed). */
         @Volatile var previewSurface: Surface? = null
 
         fun send(ctx: Context, action: String) {
@@ -105,7 +105,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
         return START_NOT_STICKY
     }
 
-    // ---------------------------------------------------------------- cycle de vie
+    // ---------------------------------------------------------------- lifecycle
 
     private fun startAll() {
         if (running) return
@@ -190,14 +190,14 @@ class ShootCamService : Service(), MotionDetector.Listener {
         stopPipelines()
     }
 
-    /** Appelé par l'écran quand la surface d'aperçu apparaît / disparaît. */
+    /** Called by the UI when the preview surface appears / disappears. */
     fun onPreviewChanged() {
         video?.setPreviewSurface(previewSurface)
     }
 
     fun takeSensorPeaks(): Pair<Float, Float> = motion?.takePeaks() ?: (0f to 0f)
 
-    // ---------------------------------------------------------------- détection
+    // ---------------------------------------------------------------- detection
 
     override fun onAim() {
         main.post {
@@ -251,7 +251,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
     private fun onShot(t: Long, manual: Boolean) {
         if (!manual && t - lastShotUs < 500_000) return
         lastShotUs = t
-        startPipelines() // mode "mise en joue" pas encore armé : on filme au moins l'après-tir
+        startPipelines() // aim mode not armed yet: record at least the post-shot window
         armedUntilUs = max(armedUntilUs, t + cfg.armTimeoutSeconds * 1_000_000L)
         val start = clipStartUs
         if (start == null) {
@@ -259,7 +259,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
             clipEndUs = t + cfg.postSeconds * 1_000_000L
             shotsInClip = 1
         } else {
-            // Tir pendant l'après-tir : on prolonge le même clip
+            // Shot during the post-shot window: extend the same clip
             clipEndUs = max(clipEndUs, t + cfg.postSeconds * 1_000_000L)
             shotsInClip++
         }
@@ -267,7 +267,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
         vibrate(longArrayOf(0, 80))
     }
 
-    // ---------------------------------------------------------------- boucle
+    // ---------------------------------------------------------------- main loop
 
     private val tick = object : Runnable {
         override fun run() {
@@ -326,7 +326,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
         }
     }
 
-    // ---------------------------------------------------------------- utilitaires
+    // ---------------------------------------------------------------- helpers
 
     private fun micGranted() =
         ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED

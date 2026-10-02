@@ -6,7 +6,7 @@ import androidx.preference.PreferenceManager
 enum class ArmMode { PERMANENT, MOTION }
 enum class ShotMode { ACCEL, AUDIO, EITHER, BOTH }
 
-/** Réglages utilisateur (écran Réglages). */
+/** User settings (Settings screen). */
 data class Config(
     val preSeconds: Int,
     val postSeconds: Int,
@@ -16,11 +16,11 @@ data class Config(
     val armMode: ArmMode,
     val armTimeoutSeconds: Int,
     val shotMode: ShotMode,
-    /** Seuil de recul en m/s² (accélération hors gravité). */
+    /** Recoil threshold in m/s² (acceleration without gravity). */
     val recoilThreshold: Float,
-    /** Vitesse angulaire (rad/s) qui caractérise le mouvement brusque de mise en joue. */
+    /** Angular rate (rad/s) characterising the sudden aiming motion. */
     val aimRate: Float,
-    /** Niveau audio crête 0..1 considéré comme une détonation. */
+    /** Peak audio level (0..1) treated as a gunshot. */
     val audioThreshold: Float,
     val vibrate: Boolean,
     val keepScreenOn: Boolean,

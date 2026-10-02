@@ -15,8 +15,8 @@ import kotlin.math.abs
 import kotlin.math.max
 
 /**
- * Micro -> AAC -> ClipBuffer. Calcule aussi le niveau crête de chaque bloc
- * (0..1) pour la détection acoustique de la détonation.
+ * Microphone -> AAC -> ClipBuffer. Also computes the peak level of each block
+ * (0..1) for acoustic gunshot detection.
  */
 class AudioPipeline(
     private val ctx: Context,
@@ -30,7 +30,7 @@ class AudioPipeline(
     fun start() {
         val minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val am = ctx.getSystemService(AudioManager::class.java)
-        // UNPROCESSED = pas d'AGC : la détonation garde sa vraie crête.
+        // UNPROCESSED = no AGC, so the gunshot keeps its true peak level.
         val source = if (am.getProperty(AudioManager.PROPERTY_SUPPORT_AUDIO_SOURCE_UNPROCESSED) == "true")
             MediaRecorder.AudioSource.UNPROCESSED else MediaRecorder.AudioSource.CAMCORDER
         val rec = AudioRecord(

@@ -13,9 +13,9 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * - Recul : pic d'accélération (hors gravité) au-dessus du seuil.
- * - Mise en joue : rotation brusque (gyroscope) suivie d'une stabilisation (visée).
- * - Orientation de l'appareil (pour la rotation de la vidéo).
+ * - Recoil: acceleration peak (gravity removed) above the threshold.
+ * - Aiming: sudden rotation (gyroscope) followed by stabilisation (aim).
+ * - Device orientation (for video rotation).
  */
 class MotionDetector(
     ctx: Context,
@@ -37,17 +37,17 @@ class MotionDetector(
     private var lastAccelTs = 0L
     private var lastRecoilTs = 0L
 
-    // Machine à états "mise en joue"
+    // Aiming state machine
     private var swingStart = 0L
     private var swingDone = 0L
     private var stillSince = 0L
     private var lastAimTs = 0L
 
-    /** Orientation de l'appareil arrondie à 0/90/180/270 (convention OrientationEventListener). */
+    /** Device orientation rounded to 0/90/180/270 (OrientationEventListener convention). */
     @Volatile var deviceOrientation = 270
         private set
 
-    // Crêtes pour l'écran de calibrage (lues puis remises à zéro par l'UI)
+    // Peaks for the calibration display (read then reset by the UI)
     @Volatile private var peakAccel = 0f
     @Volatile private var peakGyro = 0f
 
@@ -83,7 +83,7 @@ class MotionDetector(
 
     private fun onAccel(e: SensorEvent) {
         val v = e.values
-        // Passe-bas (tau = 0,3 s) pour isoler la gravité
+        // Low-pass filter (tau = 0.3 s) to isolate gravity
         val dt = if (lastAccelTs == 0L) 0.01f else ((e.timestamp - lastAccelTs) / 1e9f).coerceIn(0.0005f, 0.1f)
         lastAccelTs = e.timestamp
         val alpha = 0.3f / (0.3f + dt)
@@ -149,9 +149,9 @@ class MotionDetector(
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     companion object {
-        private const val SWING_MIN_NS = 60_000_000L      // rotation brusque >= 60 ms
-        private const val AIM_WINDOW_NS = 2_500_000_000L  // stabilisation dans les 2,5 s
-        private const val STILL_MIN_NS = 250_000_000L     // stable pendant 250 ms
+        private const val SWING_MIN_NS = 60_000_000L      // sudden rotation >= 60 ms
+        private const val AIM_WINDOW_NS = 2_500_000_000L  // stabilisation within 2.5 s
+        private const val STILL_MIN_NS = 250_000_000L     // steady for 250 ms
         private const val STILL_RATE = 0.6f               // rad/s
     }
 }

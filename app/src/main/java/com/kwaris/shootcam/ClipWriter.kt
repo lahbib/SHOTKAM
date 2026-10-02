@@ -14,7 +14,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Écrit un MP4 dans Films/ShootCam à partir des échantillons encodés (pas de ré-encodage). */
+/** Writes an MP4 to Movies/ShootCam from the encoded samples (no re-encoding). */
 object ClipWriter {
     private const val TAG = "ClipWriter"
 

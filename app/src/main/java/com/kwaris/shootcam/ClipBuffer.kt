@@ -11,8 +11,8 @@ const val TRACK_VIDEO = 0
 const val TRACK_AUDIO = 1
 
 /**
- * Horloge commune caméra / audio / capteurs, en microsecondes.
- * Alignée sur la base de temps des images caméra (REALTIME ou MONOTONIC selon l'appareil).
+ * Shared camera / audio / sensor clock, in microseconds.
+ * Aligned with the camera frame timebase (REALTIME or MONOTONIC depending on the device).
  */
 object Clock {
     @Volatile
@@ -37,9 +37,9 @@ class EncodedSample(val track: Int, val data: ByteArray, val ptsUs: Long, val fl
 }
 
 /**
- * Tampon circulaire d'images DÉJÀ encodées (H.264 + AAC).
- * On garde en permanence les N dernières secondes ; à la détection d'un tir on
- * extrait [tir - avant ; tir + après] sans ré-encodage.
+ * Ring buffer of ALREADY encoded samples (H.264 + AAC).
+ * Always keeps the last N seconds; when a shot is detected,
+ * [shot - before ; shot + after] is extracted without re-encoding.
  */
 class ClipBuffer {
     private val samples = ArrayDeque<EncodedSample>()
@@ -52,14 +52,14 @@ class ClipBuffer {
         samples.addLast(s)
     }
 
-    /** Supprime tout ce qui précède la dernière image clé <= keepFromUs. */
+    /** Drops everything before the last keyframe <= keepFromUs. */
     @Synchronized
     fun trim(keepFromUs: Long) {
         val cut = keyIndexAtOrBefore(keepFromUs)
         if (cut > 0) repeat(cut) { samples.removeFirst() }
     }
 
-    /** Copie des échantillons couvrant [fromUs ; toUs], en démarrant sur une image clé. */
+    /** Copies the samples covering [fromUs ; toUs], starting on a keyframe. */
     @Synchronized
     fun snapshot(fromUs: Long, toUs: Long): List<EncodedSample> {
         var start = keyIndexAtOrBefore(fromUs)

@@ -105,7 +105,7 @@ class MainActivity : AppCompatActivity() {
         ShootCamService.send(this, ShootCamService.ACTION_START)
     }
 
-    // ------------------------------------------------------------ aperçu
+    // ------------------------------------------------------------ preview
 
     private val textureListener = object : TextureView.SurfaceTextureListener {
         override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) = attachPreview(st, w, h)
@@ -120,7 +120,7 @@ class MainActivity : AppCompatActivity() {
         if (surface != null) return
         val cfg = Config.load(this)
         val mgr = getSystemService(CameraManager::class.java)
-        // Aperçu plafonné à 1080p (combinaison de flux garantie avec l'enregistrement)
+        // Preview capped at 1080p (stream combination guaranteed alongside recording)
         previewSize = CameraUtil.sizeFor(mgr, SurfaceTexture::class.java, minOf(cfg.height, 1080))
         st.setDefaultBufferSize(previewSize.width, previewSize.height)
         configureTransform(w, h)
@@ -159,12 +159,12 @@ class MainActivity : AppCompatActivity() {
         textureView.setTransform(matrix)
     }
 
-    // ------------------------------------------------------------ rafraîchissement UI
+    // ------------------------------------------------------------ UI refresh
 
     private val refresh = object : Runnable {
         override fun run() {
             val running = StatusBus.running
-            // Paysage 90° <-> 270° ne recrée pas l'activité : on recale l'aperçu.
+            // Landscape 90° <-> 270° does not recreate the activity: re-apply the preview transform.
             if (surface != null && windowManager.defaultDisplay.rotation != lastRotation) {
                 configureTransform(textureView.width, textureView.height)
             }

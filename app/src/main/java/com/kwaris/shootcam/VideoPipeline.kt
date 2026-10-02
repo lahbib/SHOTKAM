@@ -21,8 +21,8 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * Caméra arrière (Camera2) -> encodeur H.264 (MediaCodec, surface d'entrée) -> ClipBuffer.
- * Un aperçu optionnel peut être branché/débranché à chaud (recréation de la session).
+ * Back camera (Camera2) -> H.264 encoder (MediaCodec, input surface) -> ClipBuffer.
+ * An optional preview can be attached/detached at runtime (the session is recreated).
  */
 class VideoPipeline(
     private val ctx: Context,
@@ -74,7 +74,7 @@ class VideoPipeline(
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
             setInteger(MediaFormat.KEY_BIT_RATE, cfg.bitrate)
             setInteger(MediaFormat.KEY_FRAME_RATE, cfg.fps)
-            // 1 image clé / seconde : précision de découpe du tampon = 1 s
+            // 1 keyframe per second: buffer cut precision = 1 s
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
         }
         val enc = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
@@ -173,7 +173,7 @@ class VideoPipeline(
 
                 override fun onConfigureFailed(s: CameraCaptureSession) {
                     if (previewSurface != null) {
-                        // Retente sans aperçu : l'enregistrement prime.
+                        // Retry without preview: recording takes priority.
                         previewSurface = null
                         createSession()
                     } else {
@@ -191,7 +191,7 @@ class VideoPipeline(
         }
     }
 
-    /** Branche/débranche l'aperçu. Bloquant (max 1 s) pour libérer proprement la surface. */
+    /** Attaches/detaches the preview. Blocks (max 1 s) so the surface can be released safely. */
     fun setPreviewSurface(surface: Surface?) {
         val latch = CountDownLatch(1)
         handler.post {

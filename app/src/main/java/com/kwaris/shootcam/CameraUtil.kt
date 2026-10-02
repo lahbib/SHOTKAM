@@ -11,7 +11,7 @@ object CameraUtil {
                 CameraCharacteristics.LENS_FACING_BACK
         }
 
-    /** Taille 16:9 la plus grande dont la hauteur <= targetHeight. */
+    /** Largest 16:9 size whose height is <= targetHeight. */
     fun chooseSize(sizes: Array<Size>?, targetHeight: Int): Size {
         if (sizes.isNullOrEmpty()) return Size(1280, 720)
         val wide = sizes.filter { it.width * 9 == it.height * 16 && it.height <= targetHeight }
