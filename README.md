@@ -1,41 +1,41 @@
 # ShootCam
 
-Transforme un téléphone Android (monté sur le fusil) en caméra de tir :
-la vidéo tourne en **tampon circulaire**, et à chaque tir l'appli sauvegarde
-**N s avant + M s après** (30 s / 20 s par défaut, réglables).
+Turns an Android phone mounted on a rifle into a shooting camera:
+video runs in a **ring buffer**, and every shot saves
+**N s before + M s after** (30 s / 20 s by default, configurable).
 
-## Fonctionnement
+## How it works
 
-| Élément | Détail |
+| Component | Details |
 |---|---|
-| Tampon | Vidéo H.264 + son AAC déjà encodés, gardés en RAM (~40 Mo pour 30 s en 1080p) |
-| Détection du tir | Pic d'accélération (recul) et/ou crête sonore (détonation) — 4 modes |
-| Mise en joue | Rotation brusque (gyroscope) puis stabilisation ≥ 250 ms → arme la caméra |
-| Tirs rapprochés | Un tir pendant l'après-tir prolonge le même clip (nom : `_3tirs`) |
-| Sortie | MP4 dans **Films/ShootCam** (galerie), sans ré-encodage |
-| Arrière-plan | Service de premier plan : continue écran éteint, notification « Sauver / Arrêter » |
+| Buffer | Already-encoded H.264 video + AAC audio kept in RAM (~40 MB for 30 s at 1080p) |
+| Shot detection | Acceleration peak (recoil) and/or sound peak (gunshot) — 4 modes |
+| Aiming | Sudden rotation (gyroscope) followed by ≥ 250 ms of stability → arms the camera |
+| Rapid shots | A shot during the post-shot window extends the same clip (file name: `_3tirs`) |
+| Output | MP4 in **Movies/ShootCam** (gallery), no re-encoding |
+| Background | Foreground service: keeps running with the screen off, "Save / Stop" notification |
 
-### Modes d'armement
-- **Sur mise en joue** (défaut) : capteurs seuls → caméra lancée au mouvement d'épaulé.
-  Le « avant-tir » commence donc à la mise en joue. Désarmement après inactivité (120 s).
-- **Permanent** : caméra toujours active, avant-tir complet garanti, plus gourmand.
+### Arming modes
+- **On aim** (default): sensors only → camera starts when the rifle is shouldered.
+  The pre-shot window therefore starts at the aiming motion. Disarms after inactivity (120 s).
+- **Always on**: camera always running, full pre-shot window guaranteed, uses more battery.
 
-## Calibrage (à faire une fois au stand)
-1. Démarrer, monter le téléphone, tirer.
-2. Lire à l'écran les crêtes `Accél`, `Gyro`, `Son`.
-3. Réglages → seuil de recul ≈ 70 % du pic observé ; seuil mise en joue un peu sous le pic gyro d'un épaulé.
-4. En battue (tirs voisins) : mode **Recul ET détonation**.
+## Calibration (once, at the range)
+1. Start the app, mount the phone, shoot.
+2. Read the `Accél`, `Gyro` and `Son` peaks on screen.
+3. Settings → recoil threshold ≈ 70% of the observed peak; aim threshold slightly below the gyro peak of a shouldering motion.
+4. Driven hunts (nearby shooters): use **Recoil AND gunshot** mode.
 
-## Compiler l'APK
-- **Android Studio** : ouvrir le dossier → Run.
-- **GitHub** : pousser le repo → Actions → artefact `ShootCam-apk`.
-- **GitLab** : `.gitlab-ci.yml` fourni → artefact du job `build-apk`.
-- Local : `./gradlew assembleRelease` (JDK 17 + SDK Android 35). APK signé clé debug, installable directement.
+## Building the APK
+- **Android Studio**: open the folder → Run.
+- **GitHub**: push → Actions → `ShootCam-apk` artifact.
+- **GitLab**: `.gitlab-ci.yml` included → `build-apk` job artifact.
+- Local: `./gradlew assembleRelease` (JDK 17 + Android SDK 35). APK signed with the debug key, installable directly.
 
-Android 10+ (minSdk 29). Permissions : caméra, micro, notifications.
+Android 10+ (minSdk 29). Permissions: camera, microphone, notifications.
 
-## Limites connues
-- Découpe à l'image clé près (1 s) : l'avant-tir peut faire jusqu'à +1 s.
-- Certains constructeurs (Xiaomi, Huawei, Samsung) tuent les services en arrière-plan :
-  désactiver l'optimisation batterie pour ShootCam.
-- 4K + 60 i/s non supportés par tous les capteurs (repli automatique sur la meilleure taille dispo).
+## Known limitations
+- Cuts are keyframe-aligned (1 s): the pre-shot window may be up to 1 s longer.
+- Some vendors (Xiaomi, Huawei, Samsung) kill background services:
+  disable battery optimisation for ShootCam.
+- 4K / 60 fps is not supported by every sensor (falls back to the best available size).
