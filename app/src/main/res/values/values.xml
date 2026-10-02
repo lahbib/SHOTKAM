@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ShootCam</string>
+    <string name="settings_title">Réglages ShootCam</string>
+
+    <color name="ic_bg">#1B1F1A</color>
+
+    <style name="Theme.ShootCam" parent="Theme.Material3.Dark">
+        <item name="colorPrimary">#FF7043</item>
+        <item name="colorOnPrimary">#000000</item>
+    </style>
+
+    <style name="Theme.ShootCam.Camera" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#FF7043</item>
+        <item name="colorOnPrimary">#000000</item>
+    </style>
+
+    <string-array name="res_labels">
+        <item>720p</item>
+        <item>1080p</item>
+        <item>4K (2160p)</item>
+    </string-array>
+    <string-array name="res_values">
+        <item>720</item>
+        <item>1080</item>
+        <item>2160</item>
+    </string-array>
+
+    <string-array name="fps_labels">
+        <item>30 i/s</item>
+        <item>60 i/s</item>
+    </string-array>
+    <string-array name="fps_values">
+        <item>30</item>
+        <item>60</item>
+    </string-array>
+
+    <string-array name="arm_labels">
+        <item>Sur mise en joue (économise la batterie)</item>
+        <item>Permanent (caméra toujours active)</item>
+    </string-array>
+    <string-array name="arm_values">
+        <item>MOTION</item>
+        <item>PERMANENT</item>
+    </string-array>
+
+    <string-array name="shot_labels">
+        <item>Recul (accéléromètre)</item>
+        <item>Détonation (micro)</item>
+        <item>Recul OU détonation</item>
+        <item>Recul ET détonation (anti faux positifs)</item>
+    </string-array>
+    <string-array name="shot_values">
+        <item>ACCEL</item>
+        <item>AUDIO</item>
+        <item>EITHER</item>
+        <item>BOTH</item>
+    </string-array>
+</resources>
