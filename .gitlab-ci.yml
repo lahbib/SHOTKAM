@@ -1,0 +1,9 @@
+build-apk:
+  image: ghcr.io/cirruslabs/android-sdk:35
+  script:
+    - chmod +x gradlew
+    - ./gradlew --no-daemon assembleRelease
+  artifacts:
+    paths:
+      - app/build/outputs/apk/release/*.apk
+    expire_in: 30 days
