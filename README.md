@@ -1,41 +1,59 @@
 # ShootCam
 
-Turns an Android phone mounted on a rifle into a shooting camera:
-video runs in a **ring buffer**, and every shot saves
-**N s before + M s after** (30 s / 20 s by default, configurable).
+Turns an Android phone mounted on a rifle into a shooting camera.
+Video runs in a **ring buffer**; every shot saves **N s before + M s after**
+(30 s / 20 s by default), with hunting data burned into the image.
 
-## How it works
+## Features
 
-| Component | Details |
+| Area | Details |
 |---|---|
-| Buffer | Already-encoded H.264 video + AAC audio kept in RAM (~40 MB for 30 s at 1080p) |
-| Shot detection | Acceleration peak (recoil) and/or sound peak (gunshot) — 4 modes |
-| Aiming | Sudden rotation (gyroscope) followed by ≥ 250 ms of stability → arms the camera |
-| Rapid shots | A shot during the post-shot window extends the same clip (file name: `_3tirs`) |
-| Output | MP4 in **Movies/ShootCam** (gallery), no re-encoding |
-| Background | Foreground service: keeps running with the screen off, "Save / Stop" notification |
+| Pre/post-shot recording | Already-encoded H.264 + AAC kept in RAM, cut on keyframes, no re-encoding |
+| Shot detection | Recoil (accelerometer), gunshot sound (microphone), either, or both |
+| Aim detection | Sudden shouldering rotation (gyroscope) + settle, optionally barrel level |
+| Overlay | Date/time, GPS + accuracy + altitude, weather (Open-Meteo), compass heading, elevation, cant, red dot, "TIR #n" marker |
+| Video | OpenGL pipeline: always upright, preview shows exactly what is recorded, pinch-to-zoom |
+| Clips | Gallery with thumbnails, play, share, delete; GPS location embedded in the MP4 |
+| Calibration | Guided wizard measures your rifle's recoil and your shouldering motion |
+| Background | Foreground service: keeps running with the screen off, "Save / Disarm" notification |
 
-### Arming modes
-- **On aim** (default): sensors only → camera starts when the rifle is shouldered.
-  The pre-shot window therefore starts at the aiming motion. Disarms after inactivity (120 s).
-- **Always on**: camera always running, full pre-shot window guaranteed, uses more battery.
+## Using it
+1. Mount the phone on the rifle, lens towards the target.
+2. Tap **ARMER**. Status turns blue while the buffer fills, then green (**PRÊT**).
+3. Shoot. Status turns red during the post-shot window; the clip lands in **Clips**.
+4. Volume key or **Sauver** = manual save.
 
-## Calibration (once, at the range)
-1. Start the app, mount the phone, shoot.
-2. Read the `Accél`, `Gyro` and `Son` peaks on screen.
-3. Settings → recoil threshold ≈ 70% of the observed peak; aim threshold slightly below the gyro peak of a shouldering motion.
-4. Driven hunts (nearby shooters): use **Recoil AND gunshot** mode.
+First time: **Réglages → Calibrer la détection** (1 minute), then **Point** to place
+the red dot on your point of impact (tap the image).
 
-## Building the APK
-- **Android Studio**: open the folder → Run.
-- **GitHub**: push → Actions → `ShootCam-apk` artifact.
-- **GitLab**: `.gitlab-ci.yml` included → `build-apk` job artifact.
-- Local: `./gradlew assembleRelease` (JDK 17 + Android SDK 35). APK signed with the debug key, installable directly.
+## Architecture
 
-Android 10+ (minSdk 29). Permissions: camera, microphone, notifications.
+```
+Camera2 ──► SurfaceTexture ──► OpenGL (rotate + overlay) ──┬─► H.264 encoder ─┐
+                                                           └─► preview         ├─► ClipBuffer ─► MP4
+AudioRecord ─────────────────────────────────► AAC encoder ───────────────────┘
+Accelerometer / gyroscope / rotation vector ─► detectors ─► shot / aim / attitude
+LocationManager + Open-Meteo ─► telemetry ─► overlay
+```
+
+Samples are stamped with a common clock when they leave their encoder; the muxer
+re-aligns audio and video from those stamps, so camera and audio timebases never matter.
+
+## Building
+- **GitHub**: push → Actions → `ShootCam-apk` artifact (unit tests run first).
+- **GitLab**: `.gitlab-ci.yml` included.
+- Local: `./gradlew testReleaseUnitTest assembleRelease` (JDK 17 + Android SDK 35).
+
+Releases are signed with `app/shootcam-release.jks` (sideloading only) so each new build
+installs over the previous one. Override the passwords with `SHOOTCAM_STORE_PASSWORD` /
+`SHOOTCAM_KEY_PASSWORD` if you replace the key.
+
+Android 10+ (minSdk 29). Permissions: camera, microphone, location, notifications.
 
 ## Known limitations
 - Cuts are keyframe-aligned (1 s): the pre-shot window may be up to 1 s longer.
+- Compass heading is disturbed by the steel of the rifle; treat it as indicative.
+- Weather needs network access; without it the weather line is simply omitted.
 - Some vendors (Xiaomi, Huawei, Samsung) kill background services:
   disable battery optimisation for ShootCam.
-- 4K / 60 fps is not supported by every sensor (falls back to the best available size).
+- A single clip is capped at 3 minutes; continuous shooting starts a new clip.
