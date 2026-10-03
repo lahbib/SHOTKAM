@@ -77,6 +77,13 @@ class MainActivity : AppCompatActivity() {
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
 
+        // Keep the controls clear of the camera cutout in landscape.
+        findViewById<View>(R.id.root).setOnApplyWindowInsetsListener { v, insets ->
+            val c = insets.displayCutout
+            v.setPadding(c?.safeInsetLeft ?: 0, c?.safeInsetTop ?: 0, c?.safeInsetRight ?: 0, c?.safeInsetBottom ?: 0)
+            insets
+        }
+
         textureView = findViewById(R.id.preview)
         empty = findViewById(R.id.empty)
         stateView = findViewById(R.id.state)
