@@ -21,6 +21,11 @@ object CameraUtil {
         return sizes.minBy { it.width * it.height }
     }
 
+    fun sensorOrientation(mgr: CameraManager): Int {
+        val id = backCameraId(mgr) ?: return 90
+        return mgr.getCameraCharacteristics(id).get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+    }
+
     fun sizeFor(mgr: CameraManager, klass: Class<*>, targetHeight: Int): Size {
         val id = backCameraId(mgr) ?: return Size(1280, 720)
         val map = mgr.getCameraCharacteristics(id)
