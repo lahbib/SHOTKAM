@@ -106,7 +106,7 @@ class AudioPipeline(
                         out.limit(info.offset + info.size)
                         val bytes = ByteArray(info.size)
                         out.get(bytes)
-                        buffer.add(EncodedSample(TRACK_AUDIO, bytes, info.presentationTimeUs, 0))
+                        buffer.add(EncodedSample(TRACK_AUDIO, bytes, info.presentationTimeUs, 0, Clock.nowUs()))
                     }
                     enc.releaseOutputBuffer(idx, false)
                 }
