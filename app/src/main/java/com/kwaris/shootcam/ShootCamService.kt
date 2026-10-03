@@ -60,6 +60,8 @@ class ShootCamService : Service(), MotionDetector.Listener {
         const val ACTION_SAVE = "com.kwaris.shootcam.SAVE"
         private const val CHANNEL = "shootcam"
         private const val NOTIF_ID = 42
+        /** Longest single clip; beyond that a new clip is started (keeps RAM bounded). */
+        private const val MAX_CLIP_US = 180_000_000L
 
         @Volatile var instance: ShootCamService? = null
             private set
@@ -146,6 +148,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
         running = true
         StatusBus.running = true
         StatusBus.error = ""
+        StatusBus.state = UiState.STANDBY
         StatusBus.clipsSaved = 0
         Config.prefs(this).registerOnSharedPreferenceChangeListener(prefListener)
 
@@ -181,7 +184,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
             running = false
         }
         StatusBus.running = false
-        if (StatusBus.state != UiState.ERROR) StatusBus.state = UiState.STOPPED
+        StatusBus.state = UiState.STOPPED
         StatusBus.bufferedSeconds = 0f
         StatusBus.bufferMb = 0f
         Telemetry.recording = false
@@ -299,6 +302,12 @@ class ShootCamService : Service(), MotionDetector.Listener {
         lastShotUs = t
         startPipelines() // aim mode not armed yet: record at least the post-shot window
         armedUntilUs = max(armedUntilUs, t + cfg.armTimeoutSeconds * 1_000_000L)
+        val current = clipStartUs
+        if (current != null && t + cfg.postSeconds * 1_000_000L - current > MAX_CLIP_US) {
+            // Long shooting sequence: close this clip here and start a new one (bounded memory).
+            clipEndUs = t
+            finalizeClip()
+        }
         if (clipStartUs == null) {
             clipStartUs = t - cfg.preSeconds * 1_000_000L
             clipEndUs = t + cfg.postSeconds * 1_000_000L
