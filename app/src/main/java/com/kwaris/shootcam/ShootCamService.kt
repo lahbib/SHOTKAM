@@ -23,21 +23,32 @@ import android.view.Surface
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
-import androidx.preference.PreferenceManager
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import kotlin.math.max
 
+enum class UiState { STOPPED, STANDBY, FILLING, ARMED, RECORDING, ERROR }
+
 /** State shared with the UI (read by polling). */
 object StatusBus {
     @Volatile var running = false
-    @Volatile var state = "Arrêté"
+    @Volatile var state = UiState.STOPPED
     @Volatile var bufferedSeconds = 0f
+    @Volatile var targetSeconds = 30
+    @Volatile var postRemaining = 0
     @Volatile var bufferMb = 0f
     @Volatile var clipsSaved = 0
     @Volatile var lastClip: Uri? = null
     @Volatile var lastEvent = ""
+    @Volatile var lastEventAtMs = 0L
+    @Volatile var error = ""
     @Volatile var audioPeak = 0f
+    @Volatile var maxZoom = 1f
+
+    fun event(msg: String) {
+        lastEvent = msg
+        lastEventAtMs = System.currentTimeMillis()
+    }
 }
 
 class ShootCamService : Service(), MotionDetector.Listener {
@@ -65,26 +76,31 @@ class ShootCamService : Service(), MotionDetector.Listener {
     private val main = Handler(Looper.getMainLooper())
     private val buffer = ClipBuffer()
     private val writer = Executors.newSingleThreadExecutor()
-    private lateinit var cfg: Config
+    @Volatile private lateinit var cfg: Config
 
     private var motion: MotionDetector? = null
     private var video: VideoPipeline? = null
     private var audio: AudioPipeline? = null
+    private var location: LocationTracker? = null
+    private val weather = WeatherClient()
     private var wakeLock: PowerManager.WakeLock? = null
     private var running = false
 
     private var armedUntilUs = 0L
     private var clipStartUs: Long? = null
     private var clipEndUs = 0L
-    private var shotsInClip = 0
+    private var clipShotWallMs = 0L
     private var lastShotUs = Long.MIN_VALUE / 2
     private var lastRecoilUs = Long.MIN_VALUE / 2
-    private var lastAudioUs = Long.MIN_VALUE / 2
+    private var lastAudioUs = Long.MIN_VALUE / 4
     @Volatile private var lastAudioPostUs = 0L
     private var lastNotifText = ""
+    private var tickCount = 0
 
-    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+    private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        val old = cfg
         cfg = Config.load(this)
+        if (key == Config.K_ZOOM && old.zoom != cfg.zoom) video?.refreshRequest()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -110,27 +126,42 @@ class ShootCamService : Service(), MotionDetector.Listener {
     private fun startAll() {
         if (running) return
         cfg = Config.load(this)
-        Clock.init(this)
 
         var type = ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
-        if (cfg.recordAudio && micGranted()) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        if (cfg.recordAudio && granted(Manifest.permission.RECORD_AUDIO)) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+        }
+        if (granted(Manifest.permission.ACCESS_FINE_LOCATION) || granted(Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
         try {
             ServiceCompat.startForeground(this, NOTIF_ID, buildNotification("Démarrage…"), type)
         } catch (e: Exception) {
             Log.e(TAG, "startForeground", e)
-            StatusBus.state = "Erreur : ${e.message}"
+            StatusBus.state = UiState.ERROR
+            StatusBus.error = "Démarrage impossible : ${e.message}"
             stopSelf()
             return
         }
         running = true
         StatusBus.running = true
-        PreferenceManager.getDefaultSharedPreferences(this).registerOnSharedPreferenceChangeListener(prefListener)
+        StatusBus.error = ""
+        StatusBus.clipsSaved = 0
+        Config.prefs(this).registerOnSharedPreferenceChangeListener(prefListener)
 
         wakeLock = getSystemService(PowerManager::class.java)
-            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ShootCam:rec").apply { acquire(6 * 60 * 60 * 1000L) }
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "ShootCam:rec").apply { acquire(8 * 60 * 60 * 1000L) }
 
         motion = MotionDetector(this, { cfg }, this).also { it.start() }
-        if (cfg.armMode == ArmMode.PERMANENT) startPipelines()
+        if (type and ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION != 0) {
+            location = LocationTracker(this).also { it.start() }
+        }
+        if (cfg.armMode == ArmMode.PERMANENT) {
+            startPipelines()
+            StatusBus.event("Armé — la vidéo tourne en boucle")
+        } else {
+            StatusBus.event("En veille — épaule le fusil pour armer")
+        }
         main.post(tick)
     }
 
@@ -142,16 +173,18 @@ class ShootCamService : Service(), MotionDetector.Listener {
                 finalizeClip()
             }
             motion?.stop(); motion = null
+            location?.stop(); location = null
             stopPipelines()
             wakeLock?.let { if (it.isHeld) it.release() }
             wakeLock = null
-            PreferenceManager.getDefaultSharedPreferences(this).unregisterOnSharedPreferenceChangeListener(prefListener)
+            Config.prefs(this).unregisterOnSharedPreferenceChangeListener(prefListener)
             running = false
         }
         StatusBus.running = false
-        StatusBus.state = "Arrêté"
+        if (StatusBus.state != UiState.ERROR) StatusBus.state = UiState.STOPPED
         StatusBus.bufferedSeconds = 0f
         StatusBus.bufferMb = 0f
+        Telemetry.recording = false
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -159,6 +192,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
     override fun onDestroy() {
         if (running) stopAll()
         writer.shutdown()
+        weather.shutdown()
         instance = null
         super.onDestroy()
     }
@@ -167,9 +201,15 @@ class ShootCamService : Service(), MotionDetector.Listener {
         if (video != null) return
         try {
             buffer.clear()
-            video = VideoPipeline(this, cfg, buffer) { msg -> main.post { onPipelineError(msg) } }
-                .also { it.start(previewSurface) }
-            if (cfg.recordAudio && micGranted()) {
+            val v = VideoPipeline(
+                this, { cfg }, buffer,
+                deviceOrientation = { motion?.deviceOrientation ?: 270 },
+                errorSink = { msg -> main.post { onPipelineError(msg) } },
+            )
+            video = v
+            v.start(previewSurface)
+            StatusBus.maxZoom = v.maxZoom
+            if (cfg.recordAudio && granted(Manifest.permission.RECORD_AUDIO)) {
                 audio = AudioPipeline(this, buffer) { level -> onAudioLevel(level) }.also { it.start() }
             }
         } catch (e: Exception) {
@@ -185,7 +225,9 @@ class ShootCamService : Service(), MotionDetector.Listener {
     }
 
     private fun onPipelineError(msg: String) {
-        StatusBus.lastEvent = "⚠ $msg"
+        StatusBus.state = UiState.ERROR
+        StatusBus.error = msg
+        StatusBus.event("⚠ $msg")
         updateNotification("Erreur : $msg")
         stopPipelines()
     }
@@ -203,11 +245,16 @@ class ShootCamService : Service(), MotionDetector.Listener {
         main.post {
             if (!running) return@post
             val now = Clock.nowUs()
-            StatusBus.lastEvent = "Mise en joue détectée"
             if (cfg.armMode == ArmMode.MOTION) {
                 armedUntilUs = max(armedUntilUs, now + cfg.armTimeoutSeconds * 1_000_000L)
-                startPipelines()
+                if (video == null) {
+                    startPipelines()
+                    StatusBus.event("Mise en joue détectée — caméra armée")
+                    vibrate(longArrayOf(0, 30))
+                    return@post
+                }
             }
+            StatusBus.event("Mise en joue détectée")
         }
     }
 
@@ -215,8 +262,7 @@ class ShootCamService : Service(), MotionDetector.Listener {
         main.post {
             if (!running) return@post
             lastRecoilUs = Clock.nowUs()
-            StatusBus.lastEvent = "Recul ${"%.0f".format(magnitude)} m/s²"
-            evaluateShot(fromRecoil = true)
+            evaluateShot(fromRecoil = true, detail = "recul ${magnitude.toInt()} m/s²")
         }
     }
 
@@ -229,11 +275,11 @@ class ShootCamService : Service(), MotionDetector.Listener {
         main.post {
             if (!running) return@post
             lastAudioUs = now
-            evaluateShot(fromRecoil = false)
+            evaluateShot(fromRecoil = false, detail = "détonation ${(level * 100).toInt()} %")
         }
     }
 
-    private fun evaluateShot(fromRecoil: Boolean) {
+    private fun evaluateShot(fromRecoil: Boolean, detail: String) {
         val isShot = when (cfg.shotMode) {
             ShotMode.ACCEL -> fromRecoil
             ShotMode.AUDIO -> !fromRecoil
@@ -245,25 +291,30 @@ class ShootCamService : Service(), MotionDetector.Listener {
             lastRecoilUs = Long.MIN_VALUE / 2
             lastAudioUs = Long.MIN_VALUE / 4
         }
-        onShot(Clock.nowUs(), manual = false)
+        onShot(Clock.nowUs(), manual = false, detail = detail)
     }
 
-    private fun onShot(t: Long, manual: Boolean) {
+    private fun onShot(t: Long, manual: Boolean, detail: String = "") {
         if (!manual && t - lastShotUs < 500_000) return
         lastShotUs = t
         startPipelines() // aim mode not armed yet: record at least the post-shot window
         armedUntilUs = max(armedUntilUs, t + cfg.armTimeoutSeconds * 1_000_000L)
-        val start = clipStartUs
-        if (start == null) {
+        if (clipStartUs == null) {
             clipStartUs = t - cfg.preSeconds * 1_000_000L
             clipEndUs = t + cfg.postSeconds * 1_000_000L
-            shotsInClip = 1
+            clipShotWallMs = System.currentTimeMillis()
+            Telemetry.shotsInClip = 1
         } else {
             // Shot during the post-shot window: extend the same clip
             clipEndUs = max(clipEndUs, t + cfg.postSeconds * 1_000_000L)
-            shotsInClip++
+            Telemetry.shotsInClip++
         }
-        StatusBus.lastEvent = if (manual) "Sauvegarde manuelle" else "TIR détecté (#$shotsInClip)"
+        Telemetry.lastShotUs = t
+        Telemetry.recording = true
+        StatusBus.event(
+            if (manual) "Sauvegarde manuelle lancée"
+            else "TIR #${Telemetry.shotsInClip} détecté ($detail)"
+        )
         vibrate(longArrayOf(0, 80))
     }
 
@@ -273,26 +324,41 @@ class ShootCamService : Service(), MotionDetector.Listener {
         override fun run() {
             if (!running) return
             val now = Clock.nowUs()
-            val start = clipStartUs
-            if (start != null && now >= clipEndUs) finalizeClip()
+            if (clipStartUs != null && now >= clipEndUs) finalizeClip()
 
             val keepFrom = minOf(now - cfg.preSeconds * 1_000_000L, clipStartUs ?: Long.MAX_VALUE)
             buffer.trim(keepFrom)
 
             if (cfg.armMode == ArmMode.MOTION && video != null && clipStartUs == null && now > armedUntilUs) {
                 stopPipelines()
-                StatusBus.lastEvent = "Désarmé (inactivité)"
+                StatusBus.event("Désarmé après inactivité — épaule pour réarmer")
             }
 
+            if (++tickCount % 10 == 0) weather.refreshIfNeeded()
+
             StatusBus.bufferedSeconds = buffer.durationSeconds()
+            StatusBus.targetSeconds = cfg.preSeconds
             StatusBus.bufferMb = buffer.sizeBytes() / 1_048_576f
-            val s = when {
-                clipStartUs != null -> "● ENREGISTREMENT après-tir (${max(0, (clipEndUs - now) / 1_000_000)} s)"
-                video != null -> "Armé — tampon ${StatusBus.bufferedSeconds.toInt()}/${cfg.preSeconds} s"
-                else -> "En veille — attente mise en joue"
+            StatusBus.postRemaining = if (clipStartUs != null) max(0L, (clipEndUs - now) / 1_000_000).toInt() else 0
+            if (StatusBus.state != UiState.ERROR || video != null) {
+                StatusBus.state = when {
+                    clipStartUs != null -> UiState.RECORDING
+                    video == null -> UiState.STANDBY
+                    StatusBus.bufferedSeconds + 1f < cfg.preSeconds -> UiState.FILLING
+                    else -> UiState.ARMED
+                }
+                if (video != null) StatusBus.error = ""
             }
-            StatusBus.state = s
-            updateNotification(s)
+            updateNotification(
+                when (StatusBus.state) {
+                    UiState.RECORDING -> "● Enregistrement après-tir (${StatusBus.postRemaining} s)"
+                    UiState.FILLING -> "Armé — tampon ${StatusBus.bufferedSeconds.toInt()}/${cfg.preSeconds} s"
+                    UiState.ARMED -> "Armé — prêt à tirer"
+                    UiState.STANDBY -> "En veille — épaule pour armer"
+                    UiState.ERROR -> "Erreur : ${StatusBus.error}"
+                    UiState.STOPPED -> "Arrêté"
+                }
+            )
             main.postDelayed(this, 500)
         }
     }
@@ -300,27 +366,29 @@ class ShootCamService : Service(), MotionDetector.Listener {
     private fun finalizeClip() {
         val start = clipStartUs ?: return
         val end = clipEndUs
-        val shots = shotsInClip
+        val shots = Telemetry.shotsInClip
         clipStartUs = null
+        Telemetry.recording = false
         val vf = buffer.videoFormat
         if (vf == null) {
-            StatusBus.lastEvent = "⚠ Rien à sauvegarder (vidéo pas encore prête)"
+            StatusBus.event("⚠ Rien à sauvegarder (caméra pas encore prête)")
             return
         }
         val samples = buffer.snapshot(start, end)
         val af = buffer.audioFormat
-        val orientation = ((video?.sensorOrientation ?: 90) + (motion?.deviceOrientation ?: 0)) % 360
-        StatusBus.lastEvent = "Écriture du clip…"
+        val loc = Telemetry.location
+        val wall = clipShotWallMs
+        StatusBus.event("Écriture du clip…")
         writer.execute {
-            val uri = ClipWriter.write(this, samples, vf, af, orientation, shots)
+            val uri = ClipWriter.write(this, samples, vf, af, shots, loc, wall)
             main.post {
                 if (uri != null) {
                     StatusBus.clipsSaved++
                     StatusBus.lastClip = uri
-                    StatusBus.lastEvent = "✔ Clip sauvegardé (Films/ShootCam)"
+                    StatusBus.event("✔ Clip enregistré ($shots tir${if (shots > 1) "s" else ""}) — voir Clips")
                     vibrate(longArrayOf(0, 60, 120, 60))
                 } else {
-                    StatusBus.lastEvent = "⚠ Échec écriture du clip"
+                    StatusBus.event("⚠ Échec de l'écriture du clip")
                 }
             }
         }
@@ -328,8 +396,8 @@ class ShootCamService : Service(), MotionDetector.Listener {
 
     // ---------------------------------------------------------------- helpers
 
-    private fun micGranted() =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    private fun granted(p: String) =
+        ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
 
     private fun vibrate(pattern: LongArray) {
         if (!cfg.vibrate) return
@@ -354,13 +422,14 @@ class ShootCamService : Service(), MotionDetector.Listener {
         )
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
-            .setContentTitle("ShootCam actif")
+            .setContentTitle("ShootCam")
             .setContentText(text)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .setSilent(true)
             .setContentIntent(open)
             .addAction(0, "Sauver maintenant", pi(ACTION_SAVE, 1))
-            .addAction(0, "Arrêter", pi(ACTION_STOP, 2))
+            .addAction(0, "Désarmer", pi(ACTION_STOP, 2))
             .build()
     }
 
