@@ -345,7 +345,11 @@ class VideoPipeline(
         camHandler.post { applyRequest() }
     }
 
+    @Volatile private var stopped = false
+
     fun stop() {
+        if (stopped) return
+        stopped = true
         running = false
         val camDone = CountDownLatch(1)
         camHandler.post {
