@@ -2,6 +2,17 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <PreferenceCategory app:title="Démarrage rapide">
+        <Preference
+            app:key="calibrate"
+            app:summary="Mesure le recul de TON fusil et ta façon d’épauler (1 minute)"
+            app:title="Calibrer la détection" />
+        <Preference
+            app:key="guide"
+            app:summary="Réaffiche l’explication du premier lancement"
+            app:title="Revoir le guide" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="Séquence enregistrée">
         <SeekBarPreference
             android:max="60"
@@ -9,6 +20,7 @@
             app:key="pre_seconds"
             app:min="5"
             app:showSeekBarValue="true"
+            app:summary="Secondes gardées AVANT le tir"
             app:title="Avant le tir (s)" />
         <SeekBarPreference
             android:max="60"
@@ -16,10 +28,127 @@
             app:key="post_seconds"
             app:min="5"
             app:showSeekBarValue="true"
+            app:summary="Secondes filmées APRÈS le tir"
             app:title="Après le tir (s)" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="Vidéo (appliqué au prochain démarrage)">
+    <PreferenceCategory app:title="Incrustation dans la vidéo">
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="ov_enabled"
+            app:summary="Écrit les infos directement dans l’image"
+            app:title="Activer l’incrustation" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:dependency="ov_enabled"
+            app:key="ov_datetime"
+            app:title="Date et heure" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:dependency="ov_enabled"
+            app:key="ov_gps"
+            app:title="Position GPS et altitude" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:dependency="ov_enabled"
+            app:key="ov_weather"
+            app:summary="Température, vent, humidité, pression (internet requis, Open-Meteo)"
+            app:title="Météo" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:dependency="ov_enabled"
+            app:key="ov_attitude"
+            app:summary="Cap boussole, angle de site, dévers du fusil"
+            app:title="Cap et inclinaison" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:dependency="ov_enabled"
+            app:key="ov_shot"
+            app:summary="Affiche « TIR #n » au moment du coup"
+            app:title="Marqueur de tir" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:dependency="ov_enabled"
+            app:key="ov_reddot"
+            app:summary="Bouton « Point » sur l’écran principal pour le placer"
+            app:title="Point rouge" />
+        <SeekBarPreference
+            android:max="10"
+            app:defaultValue="3"
+            app:dependency="ov_reddot"
+            app:key="ov_reddot_size"
+            app:min="1"
+            app:showSeekBarValue="true"
+            app:title="Taille du point rouge" />
+        <Preference
+            app:dependency="ov_reddot"
+            app:key="reset_dot"
+            app:title="Recentrer le point rouge" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Détection du tir">
+        <ListPreference
+            app:defaultValue="ACCEL"
+            app:entries="@array/shot_labels"
+            app:entryValues="@array/shot_values"
+            app:key="shot_mode"
+            app:title="Déclencheur"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:max="150"
+            app:defaultValue="35"
+            app:key="recoil_threshold"
+            app:min="10"
+            app:showSeekBarValue="true"
+            app:summary="Plus bas = plus sensible. Utilise « Calibrer la détection »."
+            app:title="Seuil de recul (m/s²)" />
+        <SeekBarPreference
+            android:max="100"
+            app:defaultValue="85"
+            app:key="audio_threshold"
+            app:min="30"
+            app:showSeekBarValue="true"
+            app:title="Seuil sonore (%)" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="volume_key_save"
+            app:summary="Touche volume = sauver maintenant (écran allumé)"
+            app:title="Sauvegarde par touche volume" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Armement">
+        <ListPreference
+            app:defaultValue="PERMANENT"
+            app:entries="@array/arm_labels"
+            app:entryValues="@array/arm_values"
+            app:key="arm_mode"
+            app:title="Mode"
+            app:useSimpleSummaryProvider="true" />
+        <SeekBarPreference
+            android:max="80"
+            app:defaultValue="25"
+            app:key="aim_rate"
+            app:min="10"
+            app:showSeekBarValue="true"
+            app:summary="Vitesse de l’épaulé qui arme la caméra (x0,1 rad/s). Plus bas = plus sensible."
+            app:title="Seuil mise en joue" />
+        <SwitchPreferenceCompat
+            app:defaultValue="true"
+            app:key="aim_level"
+            app:summary="Évite les déclenchements fusil à la bretelle"
+            app:title="Exiger le canon à l’horizontale" />
+        <SeekBarPreference
+            android:max="600"
+            app:defaultValue="180"
+            app:key="arm_timeout"
+            app:min="30"
+            app:seekBarIncrement="10"
+            app:showSeekBarValue="true"
+            app:summary="Mode mise en joue : la caméra s’éteint après ce délai sans visée ni tir"
+            app:title="Désarmement après inactivité (s)" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Vidéo (au prochain armement)">
         <ListPreference
             app:defaultValue="1080"
             app:entries="@array/res_labels"
@@ -40,66 +169,24 @@
             app:title="Enregistrer le son" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="Armement">
-        <ListPreference
-            app:defaultValue="MOTION"
-            app:entries="@array/arm_labels"
-            app:entryValues="@array/arm_values"
-            app:key="arm_mode"
-            app:title="Mode"
-            app:useSimpleSummaryProvider="true" />
-        <SeekBarPreference
-            android:max="600"
-            app:defaultValue="120"
-            app:key="arm_timeout"
-            app:min="30"
-            app:seekBarIncrement="10"
-            app:showSeekBarValue="true"
-            app:summary="Mode mise en joue : la caméra s’arrête si ni visée ni tir pendant ce délai"
-            app:title="Désarmement après inactivité (s)" />
-        <SeekBarPreference
-            android:max="80"
-            app:defaultValue="25"
-            app:key="aim_rate"
-            app:min="10"
-            app:showSeekBarValue="true"
-            app:summary="Vitesse de rotation qui arme la caméra. Plus bas = plus sensible."
-            app:title="Seuil mise en joue (x0,1 rad/s)" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:title="Détection du tir">
-        <ListPreference
-            app:defaultValue="ACCEL"
-            app:entries="@array/shot_labels"
-            app:entryValues="@array/shot_values"
-            app:key="shot_mode"
-            app:title="Déclencheur"
-            app:useSimpleSummaryProvider="true" />
-        <SeekBarPreference
-            android:max="150"
-            app:defaultValue="35"
-            app:key="recoil_threshold"
-            app:min="10"
-            app:showSeekBarValue="true"
-            app:summary="Noter la valeur « Accél » affichée lors d’un tir et régler ~70 % de ce pic"
-            app:title="Seuil de recul (m/s²)" />
-        <SeekBarPreference
-            android:max="100"
-            app:defaultValue="85"
-            app:key="audio_threshold"
-            app:min="30"
-            app:showSeekBarValue="true"
-            app:title="Seuil sonore (%)" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="Divers">
         <SwitchPreferenceCompat
             app:defaultValue="true"
             app:key="vibrate"
-            app:title="Vibration (tir détecté / clip sauvé)" />
+            app:summary="Courte au tir détecté, double au clip enregistré"
+            app:title="Vibrations" />
         <SwitchPreferenceCompat
             app:defaultValue="true"
             app:key="keep_screen_on"
             app:title="Garder l’écran allumé" />
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="show_meters"
+            app:summary="Valeurs des capteurs en direct sur l’écran principal"
+            app:title="Afficher les mesures" />
+        <Preference
+            app:key="version"
+            app:selectable="false"
+            app:title="Version" />
     </PreferenceCategory>
 </PreferenceScreen>
