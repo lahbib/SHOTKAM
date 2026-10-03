@@ -11,15 +11,24 @@ android {
         applicationId = "com.kwaris.shootcam"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0"
+    }
+
+    signingConfigs {
+        // Fixed key so every CI build can update the installed app (sideloaded, not Play Store).
+        create("sideload") {
+            storeFile = file("shootcam-release.jks")
+            storePassword = System.getenv("SHOOTCAM_STORE_PASSWORD") ?: "shootcam-local"
+            keyAlias = "shootcam"
+            keyPassword = System.getenv("SHOOTCAM_KEY_PASSWORD") ?: "shootcam-local"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so it can be installed directly.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("sideload")
         }
     }
     compileOptions {
@@ -29,6 +38,9 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -36,4 +48,7 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.preference:preference-ktx:1.2.1")
     implementation("com.google.android.material:material:1.12.0")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }
