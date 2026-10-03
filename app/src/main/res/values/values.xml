@@ -1,24 +1,41 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ShootCam</string>
-    <string name="settings_title">Réglages ShootCam</string>
+    <string name="settings_title">Réglages</string>
+    <string name="clips_title">Mes clips</string>
+    <string name="calib_title">Calibrage de la détection</string>
 
     <color name="ic_bg">#1B1F1A</color>
+    <color name="accent">#FF7043</color>
+    <color name="panel">#B3101410</color>
+    <color name="state_stopped">#5F6368</color>
+    <color name="state_standby">#F9A825</color>
+    <color name="state_filling">#1E88E5</color>
+    <color name="state_armed">#2E7D32</color>
+    <color name="state_recording">#D32F2F</color>
+    <color name="state_error">#8E0000</color>
 
     <style name="Theme.ShootCam" parent="Theme.Material3.Dark">
-        <item name="colorPrimary">#FF7043</item>
+        <item name="colorPrimary">@color/accent</item>
         <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondaryContainer">#3A2A24</item>
+        <item name="colorOnSecondaryContainer">#FFDBD0</item>
+        <item name="android:windowBackground">#121412</item>
     </style>
 
     <style name="Theme.ShootCam.Camera" parent="Theme.Material3.Dark.NoActionBar">
-        <item name="colorPrimary">#FF7043</item>
+        <item name="colorPrimary">@color/accent</item>
         <item name="colorOnPrimary">#000000</item>
+        <item name="colorSecondaryContainer">#3A2A24</item>
+        <item name="colorOnSecondaryContainer">#FFDBD0</item>
+        <item name="android:windowBackground">#000000</item>
+        <item name="android:windowFullscreen">true</item>
     </style>
 
     <string-array name="res_labels">
-        <item>720p</item>
-        <item>1080p</item>
-        <item>4K (2160p)</item>
+        <item>720p (léger)</item>
+        <item>1080p (recommandé)</item>
+        <item>4K (2160p, gourmand)</item>
     </string-array>
     <string-array name="res_values">
         <item>720</item>
@@ -27,8 +44,8 @@
     </string-array>
 
     <string-array name="fps_labels">
-        <item>30 i/s</item>
-        <item>60 i/s</item>
+        <item>30 images/s</item>
+        <item>60 images/s (ralenti possible)</item>
     </string-array>
     <string-array name="fps_values">
         <item>30</item>
@@ -36,19 +53,19 @@
     </string-array>
 
     <string-array name="arm_labels">
-        <item>Sur mise en joue (économise la batterie)</item>
-        <item>Permanent (caméra toujours active)</item>
+        <item>Permanent — caméra toujours active (recommandé)</item>
+        <item>À la mise en joue — économise la batterie</item>
     </string-array>
     <string-array name="arm_values">
-        <item>MOTION</item>
         <item>PERMANENT</item>
+        <item>MOTION</item>
     </string-array>
 
     <string-array name="shot_labels">
-        <item>Recul (accéléromètre)</item>
-        <item>Détonation (micro)</item>
+        <item>Recul du fusil (recommandé)</item>
+        <item>Bruit de la détonation</item>
         <item>Recul OU détonation</item>
-        <item>Recul ET détonation (anti faux positifs)</item>
+        <item>Recul ET détonation (battue)</item>
     </string-array>
     <string-array name="shot_values">
         <item>ACCEL</item>
