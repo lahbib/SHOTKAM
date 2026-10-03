@@ -1,21 +1,19 @@
 package com.kwaris.shootcam
 
 import android.content.Context
+import android.hardware.GeomagneticField
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Handler
 import android.os.HandlerThread
-import kotlin.math.atan2
 import kotlin.math.max
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /**
- * - Recoil: acceleration peak (gravity removed) above the threshold.
- * - Aiming: sudden rotation (gyroscope) followed by stabilisation (aim).
- * - Device orientation (for video rotation).
+ * Android sensor adapter: feeds [RecoilDetector] / [AimDetector] and keeps
+ * device orientation, elevation, cant and heading up to date in [Telemetry].
  */
 class MotionDetector(
     ctx: Context,
@@ -31,23 +29,19 @@ class MotionDetector(
     private val sm = ctx.getSystemService(SensorManager::class.java)
     private val accel = sm.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val gyro = sm.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+    private val rotVec = sm.getDefaultSensor(Sensor.TYPE_ROTATION_VECTOR)
     private var thread: HandlerThread? = null
 
-    private val gravity = floatArrayOf(0f, 0f, SensorManager.GRAVITY_EARTH)
-    private var lastAccelTs = 0L
-    private var lastRecoilTs = 0L
+    private val recoil = RecoilDetector { cfg().recoilThreshold }
+    private val aim = AimDetector({ cfg().aimRate }, { cfg().aimRequireLevel })
+    private val rot = FloatArray(9)
+    private var declination = 0f
+    private var declinationAt = 0L
 
-    // Aiming state machine
-    private var swingStart = 0L
-    private var swingDone = 0L
-    private var stillSince = 0L
-    private var lastAimTs = 0L
-
-    /** Device orientation rounded to 0/90/180/270 (OrientationEventListener convention). */
+    /** Device orientation 0/90/180/270 (OrientationEventListener convention), with hysteresis. */
     @Volatile var deviceOrientation = 270
         private set
 
-    // Peaks for the calibration display (read then reset by the UI)
     @Volatile private var peakAccel = 0f
     @Volatile private var peakGyro = 0f
 
@@ -58,7 +52,8 @@ class MotionDetector(
         thread = t
         val h = Handler(t.looper)
         accel?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST, h) }
-        gyro?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST, h) }
+        gyro?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME, h) }
+        rotVec?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI, h) }
     }
 
     fun stop() {
@@ -67,6 +62,7 @@ class MotionDetector(
         thread = null
     }
 
+    /** Peaks since the last call (accel m/s², gyro rad/s), for the live meters. */
     fun takePeaks(): Pair<Float, Float> {
         val r = peakAccel to peakGyro
         peakAccel = 0f
@@ -78,80 +74,49 @@ class MotionDetector(
         when (e.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> onAccel(e)
             Sensor.TYPE_GYROSCOPE -> onGyro(e)
+            Sensor.TYPE_ROTATION_VECTOR -> onRotation(e)
         }
     }
 
     private fun onAccel(e: SensorEvent) {
         val v = e.values
-        // Low-pass filter (tau = 0.3 s) to isolate gravity
-        val dt = if (lastAccelTs == 0L) 0.01f else ((e.timestamp - lastAccelTs) / 1e9f).coerceIn(0.0005f, 0.1f)
-        lastAccelTs = e.timestamp
-        val alpha = 0.3f / (0.3f + dt)
-        for (i in 0..2) gravity[i] = alpha * gravity[i] + (1 - alpha) * v[i]
+        recoil.onSample(v[0], v[1], v[2], e.timestamp)?.let { listener.onRecoil(it) }
+        peakAccel = max(peakAccel, recoil.magnitude)
 
-        val lx = v[0] - gravity[0]
-        val ly = v[1] - gravity[1]
-        val lz = v[2] - gravity[2]
-        val mag = sqrt(lx * lx + ly * ly + lz * lz)
-        peakAccel = max(peakAccel, mag)
-
-        if (mag > cfg().recoilThreshold && e.timestamp - lastRecoilTs > 300_000_000L) {
-            lastRecoilTs = e.timestamp
-            listener.onRecoil(mag)
+        val g = recoil.gravity()
+        if (Attitude.rollValid(g[0], g[1], g[2])) {
+            val roll = Attitude.rollDeg(g[0], g[1])
+            deviceOrientation = Attitude.quantise(roll, deviceOrientation)
+            Telemetry.cantDeg = Attitude.angleDiff(roll, deviceOrientation.toFloat())
         }
-        updateOrientation()
-    }
-
-    private fun updateOrientation() {
-        val x = -gravity[0]
-        val y = -gravity[1]
-        val z = -gravity[2]
-        if (4 * (x * x + y * y) >= z * z) {
-            var o = 90 - Math.toDegrees(atan2(-y, x).toDouble()).roundToInt()
-            while (o >= 360) o -= 360
-            while (o < 0) o += 360
-            deviceOrientation = ((o + 45) / 90 * 90) % 360
-        }
+        Telemetry.elevationDeg = Attitude.elevationDeg(g[0], g[1], g[2])
     }
 
     private fun onGyro(e: SensorEvent) {
         val v = e.values
         val mag = sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2])
         peakGyro = max(peakGyro, mag)
-        val t = e.timestamp
-        val thr = cfg().aimRate
+        if (aim.onGyro(mag, e.timestamp, Telemetry.elevationDeg)) listener.onAim()
+    }
 
-        if (mag > thr) {
-            if (swingStart == 0L) swingStart = t
-            if (t - swingStart >= SWING_MIN_NS) swingDone = t
-            stillSince = 0L
+    private fun onRotation(e: SensorEvent) {
+        SensorManager.getRotationMatrixFromVector(rot, e.values)
+        val h = Attitude.headingDeg(rot)
+        if (h.isNaN()) {
+            Telemetry.headingDeg = Float.NaN
             return
         }
-        swingStart = 0L
-        if (swingDone == 0L) return
-
-        if (t - swingDone > AIM_WINDOW_NS) {
-            swingDone = 0L; stillSince = 0L
-        } else if (mag < STILL_RATE) {
-            if (stillSince == 0L) stillSince = t
-            else if (t - stillSince >= STILL_MIN_NS) {
-                swingDone = 0L; stillSince = 0L
-                if (t - lastAimTs > 1_000_000_000L) {
-                    lastAimTs = t
-                    listener.onAim()
-                }
-            }
-        } else {
-            stillSince = 0L
+        // Magnetic -> true north when the position is known (refreshed every minute).
+        val loc = Telemetry.location
+        val now = System.currentTimeMillis()
+        if (loc != null && now - declinationAt > 60_000) {
+            declinationAt = now
+            declination = GeomagneticField(
+                loc.latitude.toFloat(), loc.longitude.toFloat(), loc.altitude.toFloat(), now
+            ).declination
         }
+        Telemetry.headingDeg = ((h + declination) % 360f + 360f) % 360f
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
-
-    companion object {
-        private const val SWING_MIN_NS = 60_000_000L      // sudden rotation >= 60 ms
-        private const val AIM_WINDOW_NS = 2_500_000_000L  // stabilisation within 2.5 s
-        private const val STILL_MIN_NS = 250_000_000L     // steady for 250 ms
-        private const val STILL_RATE = 0.6f               // rad/s
-    }
 }
